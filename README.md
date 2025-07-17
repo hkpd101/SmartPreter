@@ -7,7 +7,15 @@
   <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License">
 </div>
 
-## 🚀 Overview
+## � Demo
+
+<div align="center">
+  <img src="assets/ss.gif" alt="SmartPreter Demo" width="800">
+</div>
+
+*SmartPreter in action - AI-powered code review with syntax highlighting and multiple analysis types*
+
+## �🚀 Overview
 
 SmartPreter is a powerful AI-powered code review tool that provides comprehensive analysis of Python code using local language models through Ollama. It offers multiple review types including bug detection, performance optimization, security analysis, and style checking - all processed locally for maximum privacy and security.
 
