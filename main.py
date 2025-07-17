@@ -3,11 +3,12 @@ import os
 import threading
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTextEdit, 
-    QLabel, QProgressBar, QSplitter, QFrame
+    QLabel, QProgressBar, QSplitter, QFrame, QFileDialog, QMessageBox
 )
 from PyQt5.QtCore import QThread, pyqtSignal, Qt, QTimer
 from PyQt5.QtGui import QFont
 from ollama_runner import run_ollama_inference
+from syntax_highlighter import PythonSyntaxHighlighter
 
 # Suppress Qt OpenGL warnings
 os.environ['QT_LOGGING_RULES'] = 'qt.glx.debug=false'
@@ -39,6 +40,36 @@ class Smartpreter(QWidget):
         # Create main layout
         main_layout = QVBoxLayout()
         
+        # Add menu bar
+        menu_layout = QHBoxLayout()
+        
+        # File operations
+        self.load_button = QPushButton("📁 Load File")
+        self.load_button.clicked.connect(self.load_file)
+        
+        self.save_button = QPushButton("💾 Save Code")
+        self.save_button.clicked.connect(self.save_code)
+        
+        self.save_results_button = QPushButton("📋 Save Results")
+        self.save_results_button.clicked.connect(self.save_results)
+        
+        # Settings
+        self.clear_button = QPushButton("🗑️ Clear")
+        self.clear_button.clicked.connect(self.clear_all)
+        
+        # Style menu buttons
+        for btn in [self.load_button, self.save_button, self.save_results_button, self.clear_button]:
+            btn.setMinimumHeight(30)
+            btn.setFont(QFont("Arial", 9))
+        
+        menu_layout.addWidget(self.load_button)
+        menu_layout.addWidget(self.save_button)
+        menu_layout.addWidget(self.save_results_button)
+        menu_layout.addStretch()
+        menu_layout.addWidget(self.clear_button)
+        
+        main_layout.addLayout(menu_layout)
+        
         # Create splitter for resizable panels
         splitter = QSplitter(Qt.Horizontal)
         
@@ -51,7 +82,10 @@ class Smartpreter(QWidget):
         
         self.input_box = QTextEdit()
         self.input_box.setPlaceholderText("Paste your Python code here for review...")
-        self.input_box.setFont(QFont("Consolas", 10))
+        self.input_box.setFont(QFont("Consolas", 11))
+        
+        # Add syntax highlighting
+        self.highlighter = PythonSyntaxHighlighter(self.input_box.document())
         
         # Button panel
         button_layout = QHBoxLayout()
@@ -106,7 +140,7 @@ class Smartpreter(QWidget):
         self.output_box = QTextEdit()
         self.output_box.setReadOnly(True)
         self.output_box.setPlaceholderText("Code review results will appear here...")
-        self.output_box.setFont(QFont("Consolas", 10))
+        self.output_box.setFont(QFont("Consolas", 11))
         
         # Add copy button
         copy_button = QPushButton("📋 Copy Results")
@@ -129,6 +163,7 @@ class Smartpreter(QWidget):
         
         # Store current review type
         self.current_review_type = "explain"
+        self.current_file_path = None
     
     def apply_dark_theme(self):
         """Apply dark theme to the application"""
@@ -144,6 +179,7 @@ class Smartpreter(QWidget):
             border-radius: 4px;
             padding: 8px;
             color: #ffffff;
+            selection-background-color: #404040;
         }
         
         QPushButton {
@@ -165,6 +201,7 @@ class Smartpreter(QWidget):
         QPushButton:disabled {
             background-color: #2a2a2a;
             color: #666666;
+            border-color: #3a3a3a;
         }
         
         QLabel {
@@ -175,6 +212,7 @@ class Smartpreter(QWidget):
             border: 1px solid #3c3c3c;
             border-radius: 4px;
             background-color: #1e1e1e;
+            text-align: center;
         }
         
         QProgressBar::chunk {
@@ -184,6 +222,10 @@ class Smartpreter(QWidget):
         
         QSplitter::handle {
             background-color: #404040;
+        }
+        
+        QSplitter::handle:hover {
+            background-color: #4a4a4a;
         }
         """
         self.setStyleSheet(dark_style)
@@ -352,7 +394,102 @@ Provide specific suggestions for improvement with examples.
         self.output_box.setPlainText(f"❌ Error: {error}")
         self.disable_buttons(False)
 
+    def load_file(self):
+        """Load Python file into input box"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Open Python File", "", "Python Files (*.py);;All Files (*)"
+        )
+        if file_path:
+            try:
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    content = file.read()
+                    self.input_box.setPlainText(content)
+                    self.current_file_path = file_path
+                    self.setWindowTitle(f"SmartPreter – {os.path.basename(file_path)}")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to load file:\n{str(e)}")
+    
+    def save_code(self):
+        """Save current code to file"""
+        if not self.input_box.toPlainText().strip():
+            QMessageBox.warning(self, "Warning", "No code to save!")
+            return
+        
+        file_path = self.current_file_path
+        if not file_path:
+            file_path, _ = QFileDialog.getSaveFileName(
+                self, "Save Python File", "", "Python Files (*.py);;All Files (*)"
+            )
+        
+        if file_path:
+            try:
+                with open(file_path, 'w', encoding='utf-8') as file:
+                    file.write(self.input_box.toPlainText())
+                self.current_file_path = file_path
+                self.setWindowTitle(f"SmartPreter – {os.path.basename(file_path)}")
+                QMessageBox.information(self, "Success", "Code saved successfully!")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to save file:\n{str(e)}")
+    
+    def save_results(self):
+        """Save review results to file"""
+        if not self.output_box.toPlainText().strip():
+            QMessageBox.warning(self, "Warning", "No results to save!")
+            return
+        
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Save Results", "", "Text Files (*.txt);;Markdown Files (*.md);;All Files (*)"
+        )
+        if file_path:
+            try:
+                with open(file_path, 'w', encoding='utf-8') as file:
+                    file.write(f"# SmartPreter Code Review Results\n\n")
+                    file.write(f"**Review Type:** {self.current_review_type.title()}\n\n")
+                    if self.current_file_path:
+                        file.write(f"**File:** {self.current_file_path}\n\n")
+                    file.write(f"**Code:**\n```python\n{self.input_box.toPlainText()}\n```\n\n")
+                    file.write(f"**Results:**\n{self.output_box.toPlainText()}")
+                QMessageBox.information(self, "Success", "Results saved successfully!")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to save results:\n{str(e)}")
+    
+    def clear_all(self):
+        """Clear all input and output"""
+        reply = QMessageBox.question(
+            self, "Clear All", "Are you sure you want to clear all content?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            self.input_box.clear()
+            self.output_box.clear()
+            self.output_label.setText("📊 Review Results:")
+            self.current_file_path = None
+            self.setWindowTitle("SmartPreter – AI Code Reviewer")
+
+    # ...existing methods...
 if __name__ == "__main__":
+    print("Starting SmartPreter Code Reviewer...")
+    
+    # Set Qt platform options to reduce warnings
+    os.environ['QT_XCB_GL_INTEGRATION'] = 'none'
+    os.environ['QT_QUICK_BACKEND'] = 'software'
+    
+    app = QApplication(sys.argv)
+    
+    # Disable OpenGL if causing issues
+    try:
+        app.setAttribute(app.AA_UseSoftwareOpenGL, True)
+    except AttributeError:
+        # Fallback for older Qt versions
+        pass
+    
+    window = Smartpreter()
+    window.show()
+    print("Code Reviewer launched.")
+    sys.exit(app.exec_())
+
+def main():
+    """Entry point for console scripts"""
     print("Starting SmartPreter Code Reviewer...")
     
     # Set Qt platform options to reduce warnings
